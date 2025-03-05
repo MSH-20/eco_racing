@@ -34,22 +34,23 @@
 /* Private define ------------------------------------------------------------*/
 /* USER CODE BEGIN PD */
 // Define Motor Control Pins (L298N Motor Driver)
-#define LEFT_IN1  GPIO_PIN_1  // Left motor forward (PA1)
-#define LEFT_IN2  GPIO_PIN_2  // Left motor backward (PA2)
-#define RIGHT_IN3 GPIO_PIN_3  // Right motor forward (PA3)
-#define RIGHT_IN4 GPIO_PIN_4  // Right motor backward (PA4)
+#define LEFT_IN1  GPIO_PIN_3  // Left motor forward (PA1)
+#define LEFT_IN2  GPIO_PIN_4  // Left motor backward (PA2)
+#define RIGHT_IN3 GPIO_PIN_2  // Right motor forward (PA3)
+#define RIGHT_IN4 GPIO_PIN_1  // Right motor backward (PA4)
 #define LEFT_PWM  TIM_CHANNEL_1 // PA8 (PWM for left motor)/
 #define RIGHT_PWM TIM_CHANNEL_2 // PA9 (PWM for right motor)
 
 // IR Sensor Pins
+#define LEFT_SENSOR3_PIN  GPIO_PIN_5  // PA5
+#define LEFT_SENSOR2_PIN  GPIO_PIN_6  // PA6
 #define LEFT_SENSOR_PIN  GPIO_PIN_7  // PA7
-#define RIGHT_SENSOR_PIN GPIO_PIN_6  // PA6
-//#define LEFT_SENSOR2_PIN  GPIO_PIN_7  // PB7
-//#define RIGHT_SENSOR2_PIN GPIO_PIN_6  //pB6
+#define RIGHT_SENSOR3_PIN GPIO_PIN_5//	pB5
+#define RIGHT_SENSOR2_PIN GPIO_PIN_6 // PB6
+#define RIGHT_SENSOR_PIN GPIO_PIN_7  // PB7
 // PWM Speed Limits
-#define BASE_SPEED  200  // Base speed (0-1000 range)
-#define TURN_SPEED  180
-//#define TURN_SPEED_2  300
+#define BASE_SPEED  300  // Base speed (0-1000 range)
+#define TURN_SPEED  250
 // Reduced speed when turning
 #define STOP_SPEED  0 // Stop condition // Adjust as needed (0-100% PWM)
 
@@ -104,8 +105,28 @@ bool isRedLine(void);
 
 /* USER CODE END PFP */
 
-// PID Function
 void moveForward(int leftSpeed, int rightSpeed) {
+    HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_SET);  //
+    HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOA, RIGHT_IN4, GPIO_PIN_RESET);
+
+    __HAL_TIM_SET_COMPARE(&htim1, LEFT_PWM, leftSpeed);
+    __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, rightSpeed);
+}
+
+void moveBackward(int leftSpeed, int rightSpeed) {
+    HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_SET);
+    HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_RESET);
+    HAL_GPIO_WritePin(GPIOA, RIGHT_IN4, GPIO_PIN_SET);
+
+    __HAL_TIM_SET_COMPARE(&htim1, LEFT_PWM, leftSpeed);
+    __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, rightSpeed);
+}
+
+
+void turnLeft(int leftSpeed, int rightSpeed) {
     HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_SET);
@@ -115,26 +136,14 @@ void moveForward(int leftSpeed, int rightSpeed) {
     __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, rightSpeed);
 }
 
-// Function to turn left (slow right motor)
-void turnRight() {
+void turnRight(int leftSpeed, int rightSpeed) {
     HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOA, RIGHT_IN4, GPIO_PIN_RESET);
 
-    __HAL_TIM_SET_COMPARE(&htim1, LEFT_PWM, STOP_SPEED);
-    __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, TURN_SPEED);
-}
-
-// Function to turn right (slow left motor)
-void turnLeft() {
-    HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOA, RIGHT_IN4, GPIO_PIN_RESET);
-
-    __HAL_TIM_SET_COMPARE(&htim1, LEFT_PWM, TURN_SPEED);
-    __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, STOP_SPEED);
+    __HAL_TIM_SET_COMPARE(&htim1, LEFT_PWM, leftSpeed);
+    __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, rightSpeed);
 }
 
 // Function to stop the car
@@ -148,7 +157,6 @@ void stopCar() {
     __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, STOP_SPEED);
 }
 
-/* TCS34725 initialization function */
 bool tcs34725_init(void) {
     uint8_t id = 0;
     uint8_t data;
@@ -175,11 +183,10 @@ bool tcs34725_init(void) {
     return true;
 }
 
-/* Get RGBC values from the sensor */
+
 bool tcs34725_getRGBC(uint16_t *r, uint16_t *g, uint16_t *b, uint16_t *c) {
     uint8_t data[8];
 
-    // Read all color registers at once
     if (HAL_I2C_Mem_Read(&hi2c2, TCS34725_ADDR, TCS34725_CDATAL | TCS34725_COMMAND_BIT, 1, data, 8, 100) != HAL_OK) {
         return false;
     }
@@ -193,7 +200,7 @@ bool tcs34725_getRGBC(uint16_t *r, uint16_t *g, uint16_t *b, uint16_t *c) {
     return true;
 }
 
-/* Check if the color detected is red */
+
 bool isRedLine(void) {
     uint16_t r, g, b, c;
 
@@ -201,8 +208,6 @@ bool isRedLine(void) {
         return false;  // Error reading sensor
     }
 
-    // Red detection algorithm
-    // Red should be above threshold and significantly higher than green and blue
     if (r > RED_THRESHOLD &&
         (float)r/g > RED_RATIO_THRESHOLD &&
         (float)r/b > RED_RATIO_THRESHOLD) {
@@ -248,8 +253,6 @@ int main(void)
   /* USER CODE BEGIN 2 */
   // Initialize RGB sensor
   if (!tcs34725_init()) {
-    // Sensor initialization failed
-    // Could blink an LED or take other action
   }
 
   /* Start PWM channels */
@@ -259,108 +262,93 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
+  /* Infinite loop */
+  /* USER CODE BEGIN WHILE */
   while (1) {
     // Check if red line is detected
-//    if (isRedLine() && !redLineDetected) {
-//        // Red line just detected
-//        redLineDetected = true;
-//        redDetectionTime = HAL_GetTick();
-//        moveForward(BASE_SPEED, BASE_SPEED);  // Stop immediately
-//    }
-//
-//    // Check if we need to resume after red line detection
-//    if (redLineDetected) {
-//        if (HAL_GetTick() - redDetectionTime >= 5000) {  // 5 seconds passed
-//            redLineDetected = false;  // Reset detection flag
-//        } else {
-//            // Still in the 5-second stop period
-//            continue;  // Skip normal line following logic
-//        }
-//    }
+    if (isRedLine() && !redLineDetected) {
+        // Red line just detected
+        redLineDetected = true;
+        redDetectionTime = HAL_GetTick();
+        stopCar();  // Stop immediately when red line is detected
+    }
+
+    // Check if we need to resume after red line detection
+    if (redLineDetected) {
+        if (HAL_GetTick() - redDetectionTime >= 5000) {  // 5 seconds passed
+            redLineDetected = false;  // Reset detection flag
+            moveForward(BASE_SPEED, BASE_SPEED);  // Resume movement
+        } else {
+            // Still in the 5-second stop period
+            continue;  // Skip normal line following logic
+        }
+    }
 
     // Regular line following logic (only executed when not handling red line)
     // Read IR sensors
-    int leftDetected = HAL_GPIO_ReadPin(GPIOB, LEFT_SENSOR_PIN);
-    int rightDetected = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR_PIN);
-    //int leftDetected2 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR2_PIN);
-    //int rightDetected2 = HAL_GPIO_ReadPin(GPIOA, RIGHT_SENSOR2_PIN);
+    bool leftDetected = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR_PIN);
+    bool leftDetected2 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR2_PIN);
+    bool leftDetected3 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR3_PIN);
+    bool rightDetected = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR_PIN);
+    bool rightDetected2 = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR2_PIN);
+    bool rightDetected3 = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR3_PIN);
 
-    while((!leftDetected && !rightDetected)) {
-        // All sensors inside the track → Move forward
+    // All sensors on the line - move forward
+    if (leftDetected && leftDetected2 && leftDetected3 && rightDetected && rightDetected2 && rightDetected3) {
         moveForward(BASE_SPEED, BASE_SPEED);
-         leftDetected = HAL_GPIO_ReadPin(GPIOB, LEFT_SENSOR_PIN);
-         rightDetected = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR_PIN);
-         //leftDetected2 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR2_PIN);
-         //rightDetected2 = HAL_GPIO_ReadPin(GPIOA, RIGHT_SENSOR2_PIN);
     }
-    while(leftDetected) {
-            // All sensors inside the track → Move forward
-    			turnRight();
-    			leftDetected = HAL_GPIO_ReadPin(GPIOB, LEFT_SENSOR_PIN);
-    			         rightDetected = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR_PIN);
-    			         //leftDetected2 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR2_PIN);
-    			         //rightDetected2 = HAL_GPIO_ReadPin(GPIOA, RIGHT_SENSOR2_PIN);
-        }
-    while(rightDetected) {
-                // All sensors inside the track → Move forward
-        			turnLeft();
-        			leftDetected = HAL_GPIO_ReadPin(GPIOB, LEFT_SENSOR_PIN);
-        			         rightDetected = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR_PIN);
-        			         //leftDetected2 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR2_PIN);
-        			         //rightDetected2 = HAL_GPIO_ReadPin(GPIOA, RIGHT_SENSOR2_PIN);
-            }
-//    while((leftDetected && leftDetected2) && (rightDetected&& !rightDetected2)) {
-//                    // All sensors inside the track → Move forward
-//            		turnRight();
-//            		leftDetected = HAL_GPIO_ReadPin(GPIOB, LEFT_SENSOR_PIN);
-//            		         rightDetected = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR_PIN);
-//            		         leftDetected2 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR2_PIN);
-//            		         rightDetected2 = HAL_GPIO_ReadPin(GPIOA, RIGHT_SENSOR2_PIN);
-//                }
-//    while((leftDetected && !leftDetected2) && (rightDetected&& rightDetected2)) {
-//                      // All sensors inside the track → Move forward
-//    				turnLeft();
-//    				leftDetected = HAL_GPIO_ReadPin(GPIOB, LEFT_SENSOR_PIN);
-//    				         rightDetected = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR_PIN);
-//    				         leftDetected2 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR2_PIN);
-//    				         rightDetected2 = HAL_GPIO_ReadPin(GPIOA, RIGHT_SENSOR2_PIN);
-//                  }
-//^
-
-                    // All sensors inside the track → Move forward
-//            			turnLeft();
-
-
-    /*else if ((rightDetected||rightDetected2) && (!leftDetected || !leftDetected2)) {
-        // Any right sensor detects black line → Turn left
-        turnLeft();
+    // If the central sensors detect black (off the line) - move backward then forward
+    else if (!leftDetected && !rightDetected && rightDetected2 && rightDetected3 && leftDetected2 && leftDetected3) {
+        moveBackward(BASE_SPEED, BASE_SPEED);
+        HAL_Delay(500);   // Wait for 0.5 seconds
+        moveForward(BASE_SPEED, BASE_SPEED);
     }
-//    if (( rightDetected2) && !(leftDetected || leftDetected2)) {
-//            // Any right sensor detects black line → Turn left
-//    	 moveForward(STOP_SPEED, TURN_SPEED_2);
-//        }
-
-    else if ((leftDetected || leftDetected2) && (!rightDetected || !rightDetected2)) {
-        // Any left sensor detects black line → Turn right
-        turnRight();
+    // Left sensor off line - turn right
+    else if (!leftDetected && rightDetected && rightDetected2 && rightDetected3 && leftDetected2 && leftDetected3) {
+        turnRight(TURN_SPEED * 1.5, STOP_SPEED);
+    }
+    // Right sensor off line - turn left
+    else if (!rightDetected && leftDetected && rightDetected2 && rightDetected3 && leftDetected2 && leftDetected3) {
+        turnLeft(STOP_SPEED, TURN_SPEED * 1.5);
+    }
+    // Left sensor off line but others on line - turn right less sharply
+    else if ((!leftDetected) && leftDetected2 && leftDetected3 && rightDetected && rightDetected2 && rightDetected3) {
+        turnRight(TURN_SPEED, STOP_SPEED);
+    }
+    // Right sensor off line but others on line - turn left less sharply
+    else if ((!rightDetected) && rightDetected2 && rightDetected3 && leftDetected && leftDetected2 && leftDetected3 ) {
+    	turnLeft(STOP_SPEED, TURN_SPEED);
+    }
+    // Multiple left sensors off line - sharp right turn
+    else if ((!leftDetected || !leftDetected2 || !leftDetected3) && rightDetected && rightDetected2 && rightDetected3) {
+        turnRight(TURN_SPEED * 1.3, STOP_SPEED);
+    }
+    // Multiple right sensors off line - sharp left turn
+    else if ((!rightDetected || !rightDetected2 || !rightDetected3) && leftDetected && leftDetected2 && leftDetected3) {
+        turnLeft(STOP_SPEED, TURN_SPEED * 1.3);
+    }
+    // Complex case - handle with specialized turns
+    else if (!rightDetected && (!leftDetected2 || !leftDetected3)) {
+    	turnLeft(STOP_SPEED, TURN_SPEED);
+    }
+    // Complex case - handle with specialized turns
+    else if (!leftDetected && (!rightDetected2 || !rightDetected3)) {
+        moveForward(TURN_SPEED, STOP_SPEED);
+    }
+    // All sensors off line - possibly at intersection or end of line
+    else if (!leftDetected && !leftDetected2 && !leftDetected3 && !rightDetected && !rightDetected2 && !rightDetected3) {
+        moveForward(STOP_SPEED, STOP_SPEED);
     }
 
-
-    /*while ((leftDetected&&leftDetected2)&&(rightDetected&&rightDetected2)) {
-    	moveForward(BASE_SPEED,BASE_SPEED);
-
-    }
-    while ((leftDetected&&leftDetected2)&&(!rightDetected||!rightDetected2)) {
-        	turnLeft();
-    }*/
-
+  }
+//
     //HAL_Delay(10);  // Small delay for stability
   }
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
   /* USER CODE END 3 */
-}
+
 
 /**
   * @brief System Clock Configuration
@@ -408,8 +396,16 @@ void SystemClock_Config(void)
   */
 static void MX_I2C2_Init(void)
 {
+
+  /* USER CODE BEGIN I2C2_Init 0 */
+
+  /* USER CODE END I2C2_Init 0 */
+
+  /* USER CODE BEGIN I2C2_Init 1 */
+
+  /* USER CODE END I2C2_Init 1 */
   hi2c2.Instance = I2C2;
-  hi2c2.Init.ClockSpeed = 100000;  // 100kHz standard mode
+  hi2c2.Init.ClockSpeed = 400000;
   hi2c2.Init.DutyCycle = I2C_DUTYCYCLE_2;
   hi2c2.Init.OwnAddress1 = 0;
   hi2c2.Init.AddressingMode = I2C_ADDRESSINGMODE_7BIT;
@@ -417,11 +413,14 @@ static void MX_I2C2_Init(void)
   hi2c2.Init.OwnAddress2 = 0;
   hi2c2.Init.GeneralCallMode = I2C_GENERALCALL_DISABLE;
   hi2c2.Init.NoStretchMode = I2C_NOSTRETCH_DISABLE;
-
   if (HAL_I2C_Init(&hi2c2) != HAL_OK)
   {
     Error_Handler();
   }
+  /* USER CODE BEGIN I2C2_Init 2 */
+
+  /* USER CODE END I2C2_Init 2 */
+
 }
 
 /**
@@ -532,8 +531,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PA5 PA6 PA7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_5|GPIO_PIN_6|GPIO_PIN_7;
+  /*Configure GPIO pins : right3_Pin right2_Pin right1_Pin */
+  GPIO_InitStruct.Pin = right3_Pin|right2_Pin|right1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOA, &GPIO_InitStruct);
@@ -545,8 +544,8 @@ static void MX_GPIO_Init(void)
   GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_LOW;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
 
-  /*Configure GPIO pins : PB6 PB7 */
-  GPIO_InitStruct.Pin = GPIO_PIN_6|GPIO_PIN_7;
+  /*Configure GPIO pins : left3_Pin left2_Pin left1_Pin */
+  GPIO_InitStruct.Pin = left3_Pin|left2_Pin|left1_Pin;
   GPIO_InitStruct.Mode = GPIO_MODE_INPUT;
   GPIO_InitStruct.Pull = GPIO_NOPULL;
   HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
@@ -555,24 +554,9 @@ static void MX_GPIO_Init(void)
 /* USER CODE END MX_GPIO_Init_2 */
 }
 
-/* Add this function for I2C MSP initialization */
-//void HAL_I2C_MspInit(I2C_HandleTypeDef* i2cHandle)
-//{
-//  GPIO_InitTypeDef GPIO_InitStruct = {0};
-//
-//  if(i2cHandle->Instance == I2C2) {
-//    /* Enable GPIO and I2C clocks */
-//    __HAL_RCC_GPIOB_CLK_ENABLE();
-//    __HAL_RCC_I2C2_CLK_ENABLE();
-//
-//    /* Configure I2C pins: PB10=SCL, PB11=SDA */
-//    GPIO_InitStruct.Pin = GPIO_PIN_10|GPIO_PIN_11;
-//    GPIO_InitStruct.Mode = GPIO_MODE_AF_OD;    // Open drain for I2C
-//    GPIO_InitStruct.Pull = GPIO_PULLUP;        // Pull-up resistors
-//    GPIO_InitStruct.Speed = GPIO_SPEED_FREQ_HIGH;
-//    HAL_GPIO_Init(GPIOB, &GPIO_InitStruct);
-//  }
-//}
+/* USER CODE BEGIN 4 */
+
+/* USER CODE END 4 */
 
 /**
   * @brief  This function is executed in case of error occurrence.
