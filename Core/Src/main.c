@@ -49,8 +49,9 @@
 #define RIGHT_SENSOR2_PIN GPIO_PIN_6 // PB6
 #define RIGHT_SENSOR_PIN GPIO_PIN_7  // PB7
 // PWM Speed Limits
-#define BASE_SPEED  300  // Base speed (0-1000 range)
-#define TURN_SPEED  250
+#define BASE_SPEED  210 //base speed (0-1000 range)
+#define TURN_SPEED  255		// TURN SPEED/
+//#define TURN_SPEED_2  300
 // Reduced speed when turning
 #define STOP_SPEED  0 // Stop condition // Adjust as needed (0-100% PWM)
 
@@ -105,8 +106,9 @@ bool isRedLine(void);
 
 /* USER CODE END PFP */
 
+// PID Function
 void moveForward(int leftSpeed, int rightSpeed) {
-    HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_SET);  //
+    HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_RESET);
     HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_SET);
     HAL_GPIO_WritePin(GPIOA, RIGHT_IN4, GPIO_PIN_RESET);
@@ -125,38 +127,40 @@ void moveBackward(int leftSpeed, int rightSpeed) {
     __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, rightSpeed);
 }
 
+//// Function to turn left (slow right motor)
+//void turnLeft() {
+//    HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_SET);
+//    HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_RESET);
+//    HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_SET);
+//    HAL_GPIO_WritePin(GPIOA, RIGHT_IN4, GPIO_PIN_RESET);
+//
+//    __HAL_TIM_SET_COMPARE(&htim1, LEFT_PWM, TURN_SPEED);
+//    __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, STOP_SPEED);
+//}
+//
+//// Function to turn right (slow left motor)
+//void turnRight() {
+//    HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_SET);
+//    HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_RESET);
+//    HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_SET);
+//    HAL_GPIO_WritePin(GPIOA, RIGHT_IN4, GPIO_PIN_RESET);
+//
+//    __HAL_TIM_SET_COMPARE(&htim1, LEFT_PWM, STOP_SPEED);
+//    __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, TURN_SPEED);
+//}
+//
+//// Function to stop the car
+//void stopCar() {
+//    HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_RESET);
+//    HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_RESET);
+//    HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_RESET);
+//    HAL_GPIO_WritePin(GPIOA, RIGHT_IN4, GPIO_PIN_RESET);
+//
+//    __HAL_TIM_SET_COMPARE(&htim1, LEFT_PWM, STOP_SPEED);
+//    __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, STOP_SPEED);
+//}
 
-void turnLeft(int leftSpeed, int rightSpeed) {
-    HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOA, RIGHT_IN4, GPIO_PIN_RESET);
-
-    __HAL_TIM_SET_COMPARE(&htim1, LEFT_PWM, leftSpeed);
-    __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, rightSpeed);
-}
-
-void turnRight(int leftSpeed, int rightSpeed) {
-    HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_SET);
-    HAL_GPIO_WritePin(GPIOA, RIGHT_IN4, GPIO_PIN_RESET);
-
-    __HAL_TIM_SET_COMPARE(&htim1, LEFT_PWM, leftSpeed);
-    __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, rightSpeed);
-}
-
-// Function to stop the car
-void stopCar() {
-    HAL_GPIO_WritePin(GPIOA, LEFT_IN1, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOA, LEFT_IN2, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOA, RIGHT_IN3, GPIO_PIN_RESET);
-    HAL_GPIO_WritePin(GPIOA, RIGHT_IN4, GPIO_PIN_RESET);
-
-    __HAL_TIM_SET_COMPARE(&htim1, LEFT_PWM, STOP_SPEED);
-    __HAL_TIM_SET_COMPARE(&htim1, RIGHT_PWM, STOP_SPEED);
-}
-
+/* TCS34725 initialization function */
 bool tcs34725_init(void) {
     uint8_t id = 0;
     uint8_t data;
@@ -183,10 +187,11 @@ bool tcs34725_init(void) {
     return true;
 }
 
-
+/* Get RGBC values from the sensor */
 bool tcs34725_getRGBC(uint16_t *r, uint16_t *g, uint16_t *b, uint16_t *c) {
     uint8_t data[8];
 
+    // Read all color registers at once
     if (HAL_I2C_Mem_Read(&hi2c2, TCS34725_ADDR, TCS34725_CDATAL | TCS34725_COMMAND_BIT, 1, data, 8, 100) != HAL_OK) {
         return false;
     }
@@ -200,7 +205,7 @@ bool tcs34725_getRGBC(uint16_t *r, uint16_t *g, uint16_t *b, uint16_t *c) {
     return true;
 }
 
-
+/* Check if the color detected is red */
 bool isRedLine(void) {
     uint16_t r, g, b, c;
 
@@ -208,6 +213,8 @@ bool isRedLine(void) {
         return false;  // Error reading sensor
     }
 
+    // Red detection algorithm
+    // Red should be above threshold and significantly higher than green and blue
     if (r > RED_THRESHOLD &&
         (float)r/g > RED_RATIO_THRESHOLD &&
         (float)r/b > RED_RATIO_THRESHOLD) {
@@ -253,6 +260,8 @@ int main(void)
   /* USER CODE BEGIN 2 */
   // Initialize RGB sensor
   if (!tcs34725_init()) {
+    // Sensor initialization failed
+    // Could blink an LED or take other action
   }
 
   /* Start PWM channels */
@@ -262,93 +271,94 @@ int main(void)
 
   /* Infinite loop */
   /* USER CODE BEGIN WHILE */
-  /* Infinite loop */
-  /* USER CODE BEGIN WHILE */
   while (1) {
+//
+//	   if (isRedLine() && !redLineDetected)
+//	   {
+//			// Red line just detected
+//			redLineDetected = true;
+//			redDetectionTime = HAL_GetTick();
+//			//stopCar();  // Stop immediately when red line is detected
+//			moveForward(STOP_SPEED, STOP_SPEED);
+//	  }
+//
+//		        // Check if we need to resume after red line detection
+//		        if (redLineDetected) {
+//		            if (HAL_GetTick() - redDetectionTime >= 5000) {  // 5 seconds passed
+//		                redLineDetected = false;  // Reset detection flag
+//		                moveForward(BASE_SPEED, BASE_SPEED);  // Resume movement
+//		            } else {
+//		                // Still in the 5-second stop period
+//		                continue;  // Skip normal line following logic
+//		            }
+//		        }
     // Check if red line is detected
-    if (isRedLine() && !redLineDetected) {
-        // Red line just detected
-        redLineDetected = true;
-        redDetectionTime = HAL_GetTick();
-        stopCar();  // Stop immediately when red line is detected
-    }
-
-    // Check if we need to resume after red line detection
-    if (redLineDetected) {
-        if (HAL_GetTick() - redDetectionTime >= 5000) {  // 5 seconds passed
-            redLineDetected = false;  // Reset detection flag
-            moveForward(BASE_SPEED, BASE_SPEED);  // Resume movement
-        } else {
-            // Still in the 5-second stop period
-            continue;  // Skip normal line following logic
-        }
-    }
+//    if (isRedLine() && !redLineDetected) {
+//        // Red line just detected
+//        redLineDetected = true;
+//        redDetectionTime = HAL_GetTick();
+//        moveForward(BASE_SPEED, BASE_SPEED);  // Stop immediately
+//    }
+//
+//    // Check if we need to resume after red line detection
+//    if (redLineDetected) {
+//        if (HAL_GetTick() - redDetectionTime >= 5000) {  // 5 seconds passed
+//            redLineDetected = false;  // Reset detection flag
+//        } else {
+//            // Still in the 5-second stop period
+//            continue;  // Skip normal line following logic
+//        }
+//    }
 
     // Regular line following logic (only executed when not handling red line)
     // Read IR sensors
-    bool leftDetected = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR_PIN);
-    bool leftDetected2 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR2_PIN);
-    bool leftDetected3 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR3_PIN);
-    bool rightDetected = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR_PIN);
-    bool rightDetected2 = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR2_PIN);
-    bool rightDetected3 = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR3_PIN);
+	    bool leftDetected = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR_PIN);
+	    bool leftDetected2 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR2_PIN);
+	    bool leftDetected3 = HAL_GPIO_ReadPin(GPIOA, LEFT_SENSOR3_PIN);
+	    bool rightDetected = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR_PIN);
+	    bool rightDetected2 = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR2_PIN);
+	    bool rightDetected3 = HAL_GPIO_ReadPin(GPIOB, RIGHT_SENSOR3_PIN);
 
-    // All sensors on the line - move forward
-    if (leftDetected && leftDetected2 && leftDetected3 && rightDetected && rightDetected2 && rightDetected3) {
-        moveForward(BASE_SPEED, BASE_SPEED);
-    }
-    // If the central sensors detect black (off the line) - move backward then forward
-    else if (!leftDetected && !rightDetected && rightDetected2 && rightDetected3 && leftDetected2 && leftDetected3) {
-        moveBackward(BASE_SPEED, BASE_SPEED);
-        HAL_Delay(500);   // Wait for 0.5 seconds
-        moveForward(BASE_SPEED, BASE_SPEED);
-    }
-    // Left sensor off line - turn right
-    else if (!leftDetected && rightDetected && rightDetected2 && rightDetected3 && leftDetected2 && leftDetected3) {
-        turnRight(TURN_SPEED * 1.5, STOP_SPEED);
-    }
-    // Right sensor off line - turn left
-    else if (!rightDetected && leftDetected && rightDetected2 && rightDetected3 && leftDetected2 && leftDetected3) {
-        turnLeft(STOP_SPEED, TURN_SPEED * 1.5);
-    }
-    // Left sensor off line but others on line - turn right less sharply
-    else if ((!leftDetected) && leftDetected2 && leftDetected3 && rightDetected && rightDetected2 && rightDetected3) {
-        turnRight(TURN_SPEED, STOP_SPEED);
-    }
-    // Right sensor off line but others on line - turn left less sharply
-    else if ((!rightDetected) && rightDetected2 && rightDetected3 && leftDetected && leftDetected2 && leftDetected3 ) {
-    	turnLeft(STOP_SPEED, TURN_SPEED);
-    }
-    // Multiple left sensors off line - sharp right turn
-    else if ((!leftDetected || !leftDetected2 || !leftDetected3) && rightDetected && rightDetected2 && rightDetected3) {
-        turnRight(TURN_SPEED * 1.3, STOP_SPEED);
-    }
-    // Multiple right sensors off line - sharp left turn
-    else if ((!rightDetected || !rightDetected2 || !rightDetected3) && leftDetected && leftDetected2 && leftDetected3) {
-        turnLeft(STOP_SPEED, TURN_SPEED * 1.3);
-    }
-    // Complex case - handle with specialized turns
-    else if (!rightDetected && (!leftDetected2 || !leftDetected3)) {
-    	turnLeft(STOP_SPEED, TURN_SPEED);
-    }
-    // Complex case - handle with specialized turns
-    else if (!leftDetected && (!rightDetected2 || !rightDetected3)) {
-        moveForward(TURN_SPEED, STOP_SPEED);
-    }
-    // All sensors off line - possibly at intersection or end of line
-    else if (!leftDetected && !leftDetected2 && !leftDetected3 && !rightDetected && !rightDetected2 && !rightDetected3) {
-        moveForward(STOP_SPEED, STOP_SPEED);
-    }
+	    ///////////// WHEN 4 SENSORS : FRONTAL & FIRST SIDE ////////////////////
 
-  }
-//
-    //HAL_Delay(10);  // Small delay for stability
+	    if ( (leftDetected && leftDetected2) && (rightDetected && rightDetected2) )
+	    	{
+	    		moveForward(BASE_SPEED, BASE_SPEED);
+	    	}
+
+	    else if ( ((!leftDetected || !leftDetected2) && (rightDetected && rightDetected2))  	// 00 11 or 01 11 or 10 11
+	    		|| ((!leftDetected && !leftDetected2) && (rightDetected ^ rightDetected2))		// 00 01 or 00 10
+	    		|| ((leftDetected && !leftDetected2) && (!rightDetected && rightDetected2)) ) 	// 10 01
+	    		{moveForward(TURN_SPEED, STOP_SPEED);
+	    		//HAL_Delay(200);
+	    		//moveForward(TURN_SPEED, STOP_SPEED);
+	    		}											// Turn RIGHT ---> stop right motor
+
+	    else if ( ((!rightDetected || !rightDetected2) && (leftDetected && leftDetected2))  	// 11 00 or 11 01 or 11 10
+	    		|| ((!rightDetected && !rightDetected2) && (leftDetected ^ leftDetected2))		// 01 00 or 10 00
+	    		|| ((rightDetected && !rightDetected2) && (!leftDetected && leftDetected2)) ) 	// 01 10
+	    		{moveForward(STOP_SPEED, TURN_SPEED);											// Turn LEFT ---> stop left motor
+	    		//HAL_Delay(200);
+	    		//moveForward(STOP_SPEED, TURN_SPEED);
+	    		}
+	    else if ( // ((!leftDetected && !leftDetected2) && (!rightDetected && !rightDetected2))  ||	// 00 00
+	    		((!leftDetected && leftDetected2) && (!rightDetected && rightDetected2))		// 01 01
+	    		||((leftDetected && !leftDetected2) && (rightDetected && !rightDetected2))	// 10 10
+				)
+	    	{ moveBackward(BASE_SPEED*1.2, BASE_SPEED*1.2);
+	    	HAL_Delay(400);
+	    	moveForward(BASE_SPEED, BASE_SPEED);
+	    	HAL_Delay(200);
+	    	}
+
+	    else {moveForward(BASE_SPEED, BASE_SPEED);}
+
   }
   /* USER CODE END WHILE */
 
   /* USER CODE BEGIN 3 */
   /* USER CODE END 3 */
-
+}
 
 /**
   * @brief System Clock Configuration
